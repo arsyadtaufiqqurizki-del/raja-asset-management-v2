@@ -61,7 +61,7 @@ export default function ImportExcelModal({ isOpen, onClose }: ImportExcelModalPr
   const [error, setError] = useState<string | null>(null);
   const [successCount, setSuccessCount] = useState<number | null>(null);
   const [failedRows, setFailedRows] = useState<FailedRow[]>([]);
-  const [progress, setProgress] = useState({ current: 0, total: 0 });
+  const [progress, setProgress] = useState({ current: 0, total: 0, batch: 0, totalBatches: 0 });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
@@ -72,7 +72,7 @@ export default function ImportExcelModal({ isOpen, onClose }: ImportExcelModalPr
     setError(null);
     setSuccessCount(null);
     setFailedRows([]);
-    setProgress({ current: 0, total: 0 });
+    setProgress({ current: 0, total: 0, batch: 0, totalBatches: 0 });
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -99,24 +99,37 @@ export default function ImportExcelModal({ isOpen, onClose }: ImportExcelModalPr
     reader.onload = (evt) => {
       try {
         const bstr = evt.target?.result;
-        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wb = XLSX.read(bstr, { type: 'binary', cellDates: true });
         const wsname = wb.SheetNames[0];
         const ws = wb.Sheets[wsname];
-        const data = XLSX.utils.sheet_to_json(ws) as any[];
+
+        // Find header row — scan first 10 rows for 'Asset Book' or 'Asset Number' or 'Asset Description'
+        const rawData = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
+        let headerRowIndex = 0;
+        for (let i = 0; i < Math.min(10, rawData.length); i++) {
+          const row = rawData[i] || [];
+          const rowStr = row.map((c: any) => String(c || '').trim().toLowerCase()).join(',');
+          if (rowStr.includes('asset book') || rowStr.includes('asset number') || rowStr.includes('asset description')) {
+            headerRowIndex = i;
+            break;
+          }
+        }
+
+        const data = XLSX.utils.sheet_to_json(ws, { range: headerRowIndex }) as any[];
 
         // Map excel columns to our data structure
         const mappedData: ParsedRow[] = data.map((row, idx) => ({
-          rowNumber: idx + 2, // Accounting for header row
+          rowNumber: idx + headerRowIndex + 2, // Accounting for header row position
           id: row['Asset Number'] || row['id'] || `AST-IMPORTED-${idx}`,
           name: row['Asset Description'] || row['Asset Description '] || row['Asset Name'] || row['name'] || row['Name'] || '',
           assetNumber: row['Asset Number'] || row['id'] || `AST-IMPORTED-${idx}`,
           assetDescription: row['Asset Description'] || row['Asset Description '] || row['Asset Name'] || row['name'] || row['Name'] || '',
           assetCost: String(row['Asset Cost'] || row['Value'] || row['Valuation'] || row['val'] || row['Val'] || ''),
-          datePlacedInService: row['Date Placed in Service'] || row['Purchase Date'] || row['date'] || row['Date'] || '',
+          datePlacedInService: excelSerialToDate(row['Date Placed in Service'] || row['Purchase Date'] || row['date'] || row['Date'] || ''),
           listedStatus: row['Listed Status'] || row['listedStatus'] || '',
           subsidiary: row['Subsidiary'] || row['subsidiary'] || 'Unknown Subsidiary',
           category: row['Category'] || row['category'] || 'General',
-          date: row['Date Placed in Service'] || row['Purchase Date'] || row['date'] || row['Date'] || new Date().toISOString().split('T')[0],
+          date: excelSerialToDate(row['Date Placed in Service'] || row['Purchase Date'] || row['date'] || row['Date'] || '') || new Date().toISOString().split('T')[0],
           originalVal: String(row['Asset Cost'] || row['Value'] || row['Valuation'] || row['val'] || row['Val'] || ''),
           val: String(row['Asset Cost'] || row['Value'] || row['Valuation'] || row['val'] || row['Val'] || '0').replace(/[^0-9]/g, ''),
           condition: row['Condition'] || row['condition'] || 'Good',
@@ -132,7 +145,7 @@ export default function ImportExcelModal({ isOpen, onClose }: ImportExcelModalPr
           keySegment1: row['Asset Key Segment1'] || '',
           keySegment2: row['Asset Key Segment2'] || '',
           keySegment3: row['Asset Key Segment3'] || '',
-          amortizationStartDate: row['Amortization Start Date'] || '',
+          amortizationStartDate: excelSerialToDate(row['Amortization Start Date'] || ''),
           depreciationMethod: row['Depreciation Method '] || row['Depreciation Method'] || '',
           lifeInMonths: row['Life in Months'] || '',
           costClearingAccount1: row['Cost Clearing Account Segment1'] || '',
@@ -153,6 +166,20 @@ export default function ImportExcelModal({ isOpen, onClose }: ImportExcelModalPr
       }
     };
     reader.readAsBinaryString(selectedFile);
+  };
+
+  const excelSerialToDate = (serial: any): string => {
+    if (!serial) return '';
+    if (serial instanceof Date) {
+      return serial.toISOString().split('T')[0];
+    }
+    const num = Number(serial);
+    if (isNaN(num) || num < 1) return String(serial);
+    // Excel serial date: days since 1900-01-01 (with leap year bug)
+    const utcDays = Math.floor(num - 25569);
+    const utcValue = utcDays * 86400;
+    const date = new Date(utcValue * 1000);
+    return date.toISOString().split('T')[0];
   };
 
   const determineConditionLevel = (condition: string): Asset['conditionLevel'] => {
@@ -247,14 +274,21 @@ export default function ImportExcelModal({ isOpen, onClose }: ImportExcelModalPr
       });
 
       setFailedRows(invalidRows);
-      setProgress({ current: 0, total: validRows.length });
 
-      // Chunk the upload to show progress for large datasets
-      const CHUNK_SIZE = 1000;
+      // Chunk the upload — auto-split per 100 baris agar payload tidak melebihi body limit
+      const CHUNK_SIZE = 100;
+      const totalBatches = Math.ceil(validRows.length / CHUNK_SIZE);
+      setProgress({ current: 0, total: validRows.length, batch: 0, totalBatches });
+
       for (let i = 0; i < validRows.length; i += CHUNK_SIZE) {
         const chunk = validRows.slice(i, i + CHUNK_SIZE);
+        const currentBatch = Math.floor(i / CHUNK_SIZE) + 1;
         await addAssetsBulk(chunk);
-        setProgress(prev => ({ ...prev, current: Math.min(i + CHUNK_SIZE, validRows.length) }));
+        setProgress(prev => ({
+          ...prev,
+          current: Math.min(i + CHUNK_SIZE, validRows.length),
+          batch: currentBatch
+        }));
       }
 
       setSuccessCount(validRows.length);
@@ -400,7 +434,7 @@ export default function ImportExcelModal({ isOpen, onClose }: ImportExcelModalPr
                   {isUploading && progress.total > 0 && (
                     <div className="mt-2 mb-2">
                       <div className="flex justify-between items-center mb-2">
-                        <span className="text-sm font-medium text-on-surface">Uploading Data...</span>
+                        <span className="text-sm font-medium text-on-surface">Mengimpor Data...</span>
                         <span className="text-sm font-medium text-primary">
                           {Math.round((progress.current / progress.total) * 100)}%
                         </span>
@@ -411,9 +445,14 @@ export default function ImportExcelModal({ isOpen, onClose }: ImportExcelModalPr
                           style={{ width: `${(progress.current / progress.total) * 100}%` }}
                         />
                       </div>
-                      <p className="text-xs text-on-surface-variant mt-2 text-right">
-                        {progress.current} of {progress.total} valid rows processed
-                      </p>
+                      <div className="flex justify-between items-center mt-2">
+                        <p className="text-xs text-on-surface-variant">
+                          Batch {progress.batch}/{progress.totalBatches}
+                        </p>
+                        <p className="text-xs text-on-surface-variant">
+                          {progress.current.toLocaleString()} of {progress.total.toLocaleString()} baris
+                        </p>
+                      </div>
                     </div>
                   )}
 

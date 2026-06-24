@@ -14,7 +14,7 @@ async function startServer() {
     origin: process.env.APP_URL || true,
     credentials: true,
   }));
-  app.use(express.json());
+  app.use(express.json({ limit: '10mb' }));
 
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok" });
