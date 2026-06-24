@@ -1,0 +1,83 @@
+name: Build & Deploy to Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  PROJECT_ID: gen-lang-client-0270558120
+  REGION: asia-southeast1
+  SERVICE_NAME: raja-dashboard
+  REGISTRY: asia-southeast1-docker.pkg.dev
+  IMAGE: asia-southeast1-docker.pkg.dev/gen-lang-client-0270558120/raja-dashboard/app
+
+jobs:
+  deploy:
+    name: Build, Push & Deploy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      # 1. Checkout kode
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Login ke Google Cloud pakai service account key
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      # 3. Setup gcloud CLI
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      # 4. Configure Docker untuk Artifact Registry
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGISTRY }} --quiet
+
+      # 5. Build Docker image
+      - name: Build Docker image
+        run: |
+          docker build \
+            -t ${{ env.IMAGE }}:${{ github.sha }} \
+            -t ${{ env.IMAGE }}:latest \
+            .
+
+      # 6. Push image ke Artifact Registry
+      - name: Push Docker image
+        run: docker push --all-tags ${{ env.IMAGE }}
+
+      # 7. Deploy ke Cloud Run
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy ${{ env.SERVICE_NAME }} \
+            --image=${{ env.IMAGE }}:${{ github.sha }} \
+            --region=${{ env.REGION }} \
+            --platform=managed \
+            --allow-unauthenticated \
+            --service-account=raja-dashboard-sa@${{ env.PROJECT_ID }}.iam.gserviceaccount.com \
+            --add-cloudsql-instances=${{ env.PROJECT_ID }}:${{ env.REGION }}:raja-db-instance \
+            --set-env-vars=NODE_ENV=production \
+            --set-env-vars=SQL_HOST=/cloudsql/${{ env.PROJECT_ID }}:${{ env.REGION }}:raja-db-instance \
+            --set-secrets=SQL_USER=SQL_USER:latest \
+            --set-secrets=SQL_PASSWORD=SQL_PASSWORD:latest \
+            --set-secrets=SQL_DB_NAME=SQL_DB_NAME:latest \
+            --set-secrets=MIMO_API_KEY=MIMO_API_KEY:latest \
+            --port=3000 \
+            --memory=512Mi \
+            --cpu=1 \
+            --min-instances=0 \
+            --max-instances=3 \
+            --quiet
+
+      # 8. Tampilkan URL hasil deploy
+      - name: Get Cloud Run URL
+        run: |
+          URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} \
+            --region=${{ env.REGION }} \
+            --format='value(status.url)')
+          echo "✅ Deployed to: $URL"
+          echo "APP_URL=$URL" >> $GITHUB_STEP_SUMMARY

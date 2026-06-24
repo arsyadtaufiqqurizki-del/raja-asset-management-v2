@@ -1,4 +1,6 @@
+import "dotenv/config";
 import express from "express";
+import cors from "cors";
 import path from "path";
 import { requireAuth, AuthRequest } from "./src/middleware/auth.js";
 import { db } from "./src/db/index.js";
@@ -7,7 +9,11 @@ import { eq, desc } from "drizzle-orm";
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = parseInt(process.env.PORT || '3000');
+  app.use(cors({
+    origin: process.env.APP_URL || true,
+    credentials: true,
+  }));
   app.use(express.json());
 
   app.get("/api/health", (req, res) => {
