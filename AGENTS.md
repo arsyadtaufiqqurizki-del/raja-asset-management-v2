@@ -33,6 +33,8 @@ This is a full-stack Asset Inventory & Maintenance Management application. It is
 4. **Styling Constraints**: Utilize Tailwind CSS strictly. Do not introduce custom/inline CSS or generic component libraries unless specified. Use `cn()` from `src/lib/utils.ts` for dynamic class merging.
 5. **Component Standards**: Only use functional components. Clean up side effects (`useEffect`) gracefully.
 6. **Server Restarts**: If structural changes are made to `server.ts` or package configurations, make sure the dev server is restarted.
+7. **Database Migrations**: Always run `npm run db:push` locally if modifying `schema.ts`. For production/Cloud SQL, direct the user to visit the `/api/migrate` endpoint (or use a Cloud Run job) to apply schema changes, as `drizzle-kit push` is not auto-executed on deploy.
+8. **Secrets Management**: When setting GCP Secret Manager secrets (like `SQL_PASSWORD`), avoid adding trailing newlines using CLI commands (e.g., `echo "pw"`), as PostgreSQL will treat the newline as part of the password and fail to authenticate with error code `28P01` (`auth_failed`).
 
 ## Recent Data Format Adjustments & Schema (Phase 1-5 Implementation)
 The application recently underwent a major restructuring of the `Asset` data model across the stack to align with accounting standards. 
