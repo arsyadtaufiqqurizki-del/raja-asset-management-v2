@@ -19,6 +19,11 @@ interface ParsedRow {
   originalVal: string;
   condition: string;
   status: string;
+  assetNumber?: string;
+  assetDescription?: string;
+  assetCost?: string;
+  datePlacedInService?: string;
+  listedStatus?: string;
   assetBook?: string;
   serialNumber?: string;
   assetType?: string;
@@ -103,7 +108,12 @@ export default function ImportExcelModal({ isOpen, onClose }: ImportExcelModalPr
         const mappedData: ParsedRow[] = data.map((row, idx) => ({
           rowNumber: idx + 2, // Accounting for header row
           id: row['Asset Number'] || row['id'] || `AST-IMPORTED-${idx}`,
-          name: row['Asset Description '] || row['Asset Name'] || row['name'] || row['Name'] || '',
+          name: row['Asset Description'] || row['Asset Description '] || row['Asset Name'] || row['name'] || row['Name'] || '',
+          assetNumber: row['Asset Number'] || row['id'] || `AST-IMPORTED-${idx}`,
+          assetDescription: row['Asset Description'] || row['Asset Description '] || row['Asset Name'] || row['name'] || row['Name'] || '',
+          assetCost: String(row['Asset Cost'] || row['Value'] || row['Valuation'] || row['val'] || row['Val'] || ''),
+          datePlacedInService: row['Date Placed in Service'] || row['Purchase Date'] || row['date'] || row['Date'] || '',
+          listedStatus: row['Listed Status'] || row['listedStatus'] || '',
           subsidiary: row['Subsidiary'] || row['subsidiary'] || 'Unknown Subsidiary',
           category: row['Category'] || row['category'] || 'General',
           date: row['Date Placed in Service'] || row['Purchase Date'] || row['date'] || row['Date'] || new Date().toISOString().split('T')[0],
@@ -176,24 +186,31 @@ export default function ImportExcelModal({ isOpen, onClose }: ImportExcelModalPr
       parsedData.forEach(row => {
         let errorMessage = '';
 
-        const nameStr = String(row.name || '');
-        if (!nameStr.trim()) {
-          errorMessage = 'Nama aset kosong.';
-        } else if (seenNames.has(nameStr.toLowerCase())) {
-          errorMessage = 'Duplikat (nama aset sudah ada di file ini).';
-        } else if (!row.originalVal || isNaN(Number(String(row.originalVal).replace(/[^0-9]/g, '')))) {
-          errorMessage = 'Format harga salah / tidak valid.';
-        } else if (Number(row.val) <= 0) {
-          errorMessage = 'Harga harus lebih besar dari 0.';
+        const descStr = String(row.assetDescription || row.name || '');
+        const costStr = String(row.assetCost || row.originalVal || '');
+        const costNum = Number(costStr.replace(/[^0-9]/g, ''));
+        if (!descStr.trim()) {
+          errorMessage = 'Asset Description kosong.';
+        } else if (seenNames.has(descStr.toLowerCase())) {
+          errorMessage = 'Duplikat (Asset Description sudah ada di file ini).';
+        } else if (!costStr || isNaN(costNum)) {
+          errorMessage = 'Format Asset Cost salah / tidak valid.';
+        } else if (costNum <= 0) {
+          errorMessage = 'Asset Cost harus lebih besar dari 0.';
         }
 
         if (errorMessage) {
           invalidRows.push({ ...row, errorMessage });
         } else {
-          seenNames.add(nameStr.toLowerCase());
+          seenNames.add(descStr.toLowerCase());
           validRows.push({
             id: row.id,
             name: row.name,
+            assetNumber: row.assetNumber,
+            assetDescription: row.assetDescription,
+            assetCost: row.assetCost,
+            datePlacedInService: row.datePlacedInService,
+            listedStatus: row.listedStatus,
             subsidiary: row.subsidiary,
             category: row.category,
             date: row.date,
@@ -253,11 +270,11 @@ export default function ImportExcelModal({ isOpen, onClose }: ImportExcelModalPr
     const dataToExport = failedRows.map(r => ({
       'Row Segment': r.rowNumber,
       'Error Reason': r.errorMessage,
-      'Asset Name': r.name,
+      'Asset Number': r.assetNumber || r.id,
+      'Asset Description': r.assetDescription || r.name,
       'Subsidiary': r.subsidiary,
-      'Category': r.category,
-      'Purchase Date': r.date,
-      'Value': r.originalVal,
+      'Asset Cost': r.assetCost || r.originalVal,
+      'Date Placed in Service': r.datePlacedInService || r.date,
       'Condition': r.condition,
       'Status': r.status
     }));
@@ -346,7 +363,7 @@ export default function ImportExcelModal({ isOpen, onClose }: ImportExcelModalPr
                   <h3 className="text-lg font-semibold text-on-surface mb-1">Click to upload or drag and drop</h3>
                   <p className="text-sm text-on-surface-variant max-w-md">
                     Supported formats: .xlsx, .xls, .csv. <br/>
-                    Ensure your file contains columns for Asset Name, Subsidiary, Category, Purchase Date, Value, Condition, Status.
+                    Ensure your file contains columns for: Asset Book, Asset Number, Asset Description, Asset Cost, Date Placed in Service, Depreciation Method, Life in Months, and others. Use the Export feature on an existing asset to see the full column template.
                   </p>
                 </div>
               ) : (
@@ -409,19 +426,19 @@ export default function ImportExcelModal({ isOpen, onClose }: ImportExcelModalPr
                         <table className="w-full text-left text-sm whitespace-nowrap">
                           <thead className="bg-surface-container sticky top-0">
                             <tr>
-                              <th className="px-4 py-2 font-medium text-on-surface-variant border-b border-outline-variant">Name</th>
-                              <th className="px-4 py-2 font-medium text-on-surface-variant border-b border-outline-variant">Subsidiary</th>
-                              <th className="px-4 py-2 font-medium text-on-surface-variant border-b border-outline-variant">Category</th>
-                              <th className="px-4 py-2 font-medium text-on-surface-variant border-b border-outline-variant">Value</th>
+                              <th className="px-4 py-2 font-medium text-on-surface-variant border-b border-outline-variant">Asset Number</th>
+                              <th className="px-4 py-2 font-medium text-on-surface-variant border-b border-outline-variant">Asset Description</th>
+                              <th className="px-4 py-2 font-medium text-on-surface-variant border-b border-outline-variant">Category Seg. 1</th>
+                              <th className="px-4 py-2 font-medium text-on-surface-variant border-b border-outline-variant">Asset Cost</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-outline-variant">
                             {parsedData.slice(0, 5).map((row, idx) => (
                               <tr key={idx}>
-                                <td className="px-4 py-2 text-on-surface truncate max-w-[150px]">{row.name || '-'}</td>
-                                <td className="px-4 py-2 text-on-surface-variant">{row.subsidiary}</td>
-                                <td className="px-4 py-2 text-on-surface-variant">{row.category}</td>
-                                <td className="px-4 py-2 text-on-surface-variant font-mono">{row.originalVal}</td>
+                                <td className="px-4 py-2 text-on-surface truncate max-w-[150px]">{row.assetNumber || row.id || '-'}</td>
+                                <td className="px-4 py-2 text-on-surface-variant">{row.assetDescription || row.name || '-'}</td>
+                                <td className="px-4 py-2 text-on-surface-variant">{row.categorySegment1 || row.category || '-'}</td>
+                                <td className="px-4 py-2 text-on-surface-variant font-mono">{row.assetCost || row.originalVal || '-'}</td>
                               </tr>
                             ))}
                             {parsedData.length > 5 && (
