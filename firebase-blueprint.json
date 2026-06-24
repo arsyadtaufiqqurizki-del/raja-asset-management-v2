@@ -1,0 +1,19 @@
+{
+  "collections": [
+    {
+      "name": "assets",
+      "model": "Asset",
+      "fields": [
+        { "name": "name", "type": "string" },
+        { "name": "subsidiary", "type": "string" },
+        { "name": "category", "type": "string" },
+        { "name": "date", "type": "string" },
+        { "name": "val", "type": "string" },
+        { "name": "condition", "type": "string" },
+        { "name": "conditionLevel", "type": "string" },
+        { "name": "status", "type": "string" },
+        { "name": "statusLevel", "type": "string" }
+      ]
+    }
+  ]
+}
