@@ -5,7 +5,7 @@ import path from "path";
 import { requireAuth, AuthRequest } from "./src/middleware/auth.js";
 import { db } from "./src/db/index.js";
 import { assets, maintenance, users } from "./src/db/schema.js";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, sql } from "drizzle-orm";
 
 async function startServer() {
   const app = express();
@@ -18,6 +18,51 @@ async function startServer() {
 
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok" });
+  });
+
+  // --- Temporary Migration Endpoint ---
+  // To run this, visit or fetch /api/migrate with valid Auth, or bypass auth locally
+  app.get("/api/migrate", async (req, res) => {
+    try {
+      const queries = [
+        `ALTER TABLE assets ADD COLUMN IF NOT EXISTS asset_book TEXT`,
+        `ALTER TABLE assets ADD COLUMN IF NOT EXISTS serial_number TEXT`,
+        `ALTER TABLE assets ADD COLUMN IF NOT EXISTS asset_type TEXT`,
+        `ALTER TABLE assets ADD COLUMN IF NOT EXISTS prorate_convention TEXT`,
+        `ALTER TABLE assets ADD COLUMN IF NOT EXISTS asset_units INTEGER DEFAULT 1`,
+        `ALTER TABLE assets ADD COLUMN IF NOT EXISTS category_segment_1 TEXT`,
+        `ALTER TABLE assets ADD COLUMN IF NOT EXISTS category_segment_2 TEXT`,
+        `ALTER TABLE assets ADD COLUMN IF NOT EXISTS category_segment_3 TEXT`,
+        `ALTER TABLE assets ADD COLUMN IF NOT EXISTS key_segment_1 TEXT`,
+        `ALTER TABLE assets ADD COLUMN IF NOT EXISTS key_segment_2 TEXT`,
+        `ALTER TABLE assets ADD COLUMN IF NOT EXISTS key_segment_3 TEXT`,
+        `ALTER TABLE assets ADD COLUMN IF NOT EXISTS amortization_start_date TEXT`,
+        `ALTER TABLE assets ADD COLUMN IF NOT EXISTS depreciation_method TEXT`,
+        `ALTER TABLE assets ADD COLUMN IF NOT EXISTS life_in_months INTEGER`,
+        `ALTER TABLE assets ADD COLUMN IF NOT EXISTS cost_clearing_account_1 TEXT`,
+        `ALTER TABLE assets ADD COLUMN IF NOT EXISTS cost_clearing_account_2 TEXT`,
+        `ALTER TABLE assets ADD COLUMN IF NOT EXISTS cost_clearing_account_3 TEXT`,
+        `ALTER TABLE assets ADD COLUMN IF NOT EXISTS cost_clearing_account_4 TEXT`,
+        `ALTER TABLE assets ADD COLUMN IF NOT EXISTS cost_clearing_account_5 TEXT`,
+        `ALTER TABLE assets ADD COLUMN IF NOT EXISTS cost_clearing_account_6 TEXT`,
+        `ALTER TABLE assets ADD COLUMN IF NOT EXISTS cost_clearing_account_7 TEXT`,
+        `ALTER TABLE assets ADD COLUMN IF NOT EXISTS cost_clearing_account_8 TEXT`,
+        `ALTER TABLE assets ADD COLUMN IF NOT EXISTS listed TEXT`,
+        `ALTER TABLE assets ADD COLUMN IF NOT EXISTS listed_status TEXT`,
+        `ALTER TABLE assets ADD COLUMN IF NOT EXISTS asset_number TEXT`,
+        `ALTER TABLE assets ADD COLUMN IF NOT EXISTS asset_description TEXT`,
+        `ALTER TABLE assets ADD COLUMN IF NOT EXISTS asset_cost TEXT`,
+        `ALTER TABLE assets ADD COLUMN IF NOT EXISTS date_placed_in_service TEXT`,
+        `ALTER TABLE assets ADD COLUMN IF NOT EXISTS last_updated TIMESTAMP DEFAULT NOW()`
+      ];
+      for (const q of queries) {
+        await db.execute(sql.raw(q));
+      }
+      res.json({ message: "Database schema successfully updated!" });
+    } catch (err: any) {
+      console.error(err);
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // --- Assets ---
