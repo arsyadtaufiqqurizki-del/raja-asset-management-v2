@@ -36,9 +36,20 @@ async function startServer() {
   app.post("/api/assets", requireAuth, async (req: AuthRequest, res) => {
     try {
       const payload = { ...req.body };
-      if (payload.id) {
+      // Map legacy 'id' field to assetId if present
+      if (payload.id && !payload.assetId) {
         payload.assetId = payload.id;
-        delete payload.id;
+      }
+      // Remove serial PK 'id' to prevent conflict with auto-increment
+      delete payload.id;
+      // Ensure numeric fields are proper integers (not negative or NaN)
+      if (payload.lifeInMonths !== undefined && payload.lifeInMonths !== null) {
+        const parsed = parseInt(payload.lifeInMonths);
+        payload.lifeInMonths = (!isNaN(parsed) && parsed > 0) ? parsed : null;
+      }
+      if (payload.assetUnits !== undefined && payload.assetUnits !== null) {
+        const parsed = parseInt(payload.assetUnits);
+        payload.assetUnits = (!isNaN(parsed) && parsed > 0) ? parsed : 1;
       }
       const newAsset = await db.insert(assets).values(payload).returning();
       res.json(newAsset[0]);
@@ -61,9 +72,20 @@ async function startServer() {
       
       const mappedItems = items.map(item => {
         const payload = { ...item };
-        if (payload.id) {
+        // Map legacy 'id' field to assetId if present
+        if (payload.id && !payload.assetId) {
           payload.assetId = payload.id;
-          delete payload.id;
+        }
+        // Remove serial PK 'id' to prevent conflict with auto-increment
+        delete payload.id;
+        // Sanitize integer fields
+        if (payload.lifeInMonths !== undefined && payload.lifeInMonths !== null) {
+          const parsed = parseInt(payload.lifeInMonths);
+          payload.lifeInMonths = (!isNaN(parsed) && parsed > 0) ? parsed : null;
+        }
+        if (payload.assetUnits !== undefined && payload.assetUnits !== null) {
+          const parsed = parseInt(payload.assetUnits);
+          payload.assetUnits = (!isNaN(parsed) && parsed > 0) ? parsed : 1;
         }
         return payload;
       });

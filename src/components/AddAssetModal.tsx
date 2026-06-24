@@ -176,7 +176,7 @@ export default function AddAssetModal() {
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <label className="text-sm font-semibold text-on-surface">Life in Months</label>
-                  <input type="number" placeholder="e.g. 48" value={newAsset.lifeInMonths} onChange={handleInputChange('lifeInMonths')} className="w-full px-3 py-2 bg-surface-container-low border border-outline-variant rounded-lg text-sm text-on-surface focus:border-primary focus:ring-1 focus:ring-primary outline-none" />
+                  <input type="number" min="1" placeholder="e.g. 48" value={newAsset.lifeInMonths} onChange={handleInputChange('lifeInMonths')} className="w-full px-3 py-2 bg-surface-container-low border border-outline-variant rounded-lg text-sm text-on-surface focus:border-primary focus:ring-1 focus:ring-primary outline-none" />
                 </div>
               </div>
             </section>
