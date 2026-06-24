@@ -3,7 +3,7 @@ name: Build & Deploy to Cloud Run
 on:
   push:
     branches:
-      - main
+      - master
 
 env:
   PROJECT_ID: gen-lang-client-0270558120
